@@ -1,0 +1,136 @@
+version: 2
+
+models:
+  - name: fct_pfas_exposure_county
+    description: Per county, how many tested water systems have PFOA or PFOS at 4 ppt or more.
+    columns:
+      - name: county_fips
+        description: Five-digit county code.
+        data_tests: [not_null, unique]
+      - name: state_fips
+        description: Two-digit state code.
+        data_tests: [not_null]
+      - name: systems_tested
+        description: Water systems with at least one PFOA or PFOS result serving the county.
+        data_tests: [not_null]
+      - name: systems_over_4ppt
+        description: Tested systems with a PFOA or PFOS result at or above 4 ppt.
+        data_tests: [not_null]
+      - name: share_systems_over_4ppt
+        description: Share of tested systems over 4 ppt.
+        data_tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: dim_commercial_density_county
+    description: Count of target business establishments per county.
+    columns:
+      - name: county_fips
+        description: Five-digit county code.
+        data_tests: [not_null, unique]
+      - name: target_estab_total
+        description: All target business establishments in the county.
+        data_tests: [not_null]
+
+  - name: fct_pfas_commercial_opportunity
+    description: County territory ranking combining share of systems over 4 ppt with target business counts.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: county_fips
+        description: Five-digit county code.
+        data_type: varchar
+        data_tests: [not_null, unique]
+      - name: county_name
+        description: County name.
+        data_type: varchar
+        data_tests: [not_null]
+      - name: state
+        description: Two-letter state code.
+        data_type: varchar
+        data_tests: [not_null]
+      - name: share_systems_over_4ppt
+        description: Share of tested systems over 4 ppt.
+        data_type: double
+        data_tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: systems_tested
+        description: Water systems tested for PFOA or PFOS serving the county.
+        data_type: bigint
+        data_tests: [not_null]
+      - name: systems_over_4ppt
+        description: Tested systems at or above 4 ppt.
+        data_type: bigint
+        data_tests: [not_null]
+      - name: pop_county
+        description: Total county population.
+        data_type: bigint
+      - name: target_estab_total
+        description: Hotels, restaurants, hospitals, food and beverage manufacturers in the county.
+        data_type: bigint
+        data_tests: [not_null]
+      - name: opportunity_score
+        description: Share over 4 ppt times ln(1 + target businesses). Higher means a better territory.
+        data_type: double
+        data_tests: [not_null]
+      - name: rank_national
+        description: Rank across ranked counties (systems_tested >= var min_systems_tested), 1 is best; NULL otherwise.
+        data_type: bigint
+        data_tests: [unique]
+      - name: rank_state
+        description: Rank within the state among ranked counties, 1 is best; NULL when unranked.
+        data_type: bigint
+
+unit_tests:
+  - name: opportunity_score_and_ranks
+    model: fct_pfas_commercial_opportunity
+    given:
+      - input: ref('fct_pfas_exposure_county')
+        rows:
+          - {county_fips: "48001", state_fips: "48", systems_tested: 4, systems_over_4ppt: 2, share_systems_over_4ppt: 0.5, pop_county: 1000}
+          - {county_fips: "48002", state_fips: "48", systems_tested: 3, systems_over_4ppt: 3, share_systems_over_4ppt: 1.0, pop_county: 500}
+          - {county_fips: "37001", state_fips: "37", systems_tested: 1, systems_over_4ppt: 1, share_systems_over_4ppt: 1.0, pop_county: 200}
+      - input: ref('dim_commercial_density_county')
+        rows:
+          - {county_fips: "48001", target_estab_total: 99}
+          - {county_fips: "48002", target_estab_total: 3}
+      - input: ref('stg_acs_population')
+        rows:
+          - {county_fips: "48001", county_name: "Alder County, Texas"}
+          - {county_fips: "48002", county_name: "Birch County, Texas"}
+      - input: ref('stg_zcta_county')
+        rows:
+          - {zcta5: "27001", county_fips: "37001", county_name: "Elm County"}
+      - input: ref('state_fips')
+        rows:
+          - {state_fips: "48", state_abbr: "TX"}
+          - {state_fips: "37", state_abbr: "NC"}
+    expect:
+      rows:
+        # 48001: 0.5*ln(100); 48002: 1.0*ln(4); 37001: no businesses -> 0, and 1 tested system < 3 -> unranked
+        - {county_fips: "48001", county_name: "Alder County", state: "TX", opportunity_score: 2.302585092994046, target_estab_total: 99, rank_national: 1, rank_state: 1}
+        - {county_fips: "48002", county_name: "Birch County", state: "TX", opportunity_score: 1.3862943611198906, target_estab_total: 3, rank_national: 2, rank_state: 2}
+        - {county_fips: "37001", county_name: "Elm County", state: "NC", opportunity_score: 0.0, target_estab_total: 0, rank_national: null, rank_state: null}
+
+  - name: zcta_largest_land_part_wins
+    model: stg_zcta_county
+    given:
+      - input: source('raw', 'zcta_county')
+        rows:
+          - {geoid_zcta5_20: "A", geoid_county_20: "48003", namelsad_county_20: "Cedar County", arealand_zcta5_20: "1000", arealand_part: "400"}
+          - {geoid_zcta5_20: "A", geoid_county_20: "48002", namelsad_county_20: "Birch County", arealand_zcta5_20: "1000", arealand_part: "600"}
+          - {geoid_zcta5_20: "B", geoid_county_20: "48004", namelsad_county_20: "Dune County", arealand_zcta5_20: "1000", arealand_part: "500"}
+          - {geoid_zcta5_20: "B", geoid_county_20: "48002", namelsad_county_20: "Birch County", arealand_zcta5_20: "1000", arealand_part: "500"}
+          - {geoid_zcta5_20: "", geoid_county_20: "48001", namelsad_county_20: "Alder County", arealand_zcta5_20: "0", arealand_part: "250"}
+    expect:
+      rows:
+        - {zcta5: "A", county_fips: "48002", county_name: "Birch County", land_share: 0.6}
+        - {zcta5: "B", county_fips: "48002", county_name: "Birch County", land_share: 0.5}

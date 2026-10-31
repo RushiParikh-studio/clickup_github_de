@@ -2,25 +2,77 @@ version: 2
 
 models:
   - name: stg_naics_targets
+    description: The five target business types (NAICS codes) used to size the commercial opportunity.
     columns:
       - name: naics
+        description: NAICS industry code.
         data_tests: [not_null, unique]
       - name: label
+        description: Business type name.
         data_tests: [not_null]
+
   - name: stg_ucmr5_results
+    description: One row per UCMR 5 sample result, typed. Over-threshold flags PFOA or PFOS results of 4 ppt or more.
     columns:
       - name: pwsid
+        description: Public water system ID.
         data_tests: [not_null]
       - name: state
-        data_tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: ["TX", "CA", "NC", "NY", "FL"]
-      - name: contaminant
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: ["PFOA", "PFOS", "PFHxS"]
-      - name: is_over_4ppt
+        description: Two-letter state code, or an EPA region code for tribal systems.
         data_tests: [not_null]
+      - name: contaminant
+        description: Contaminant name as reported by EPA. Any contaminant may appear.
+        data_tests: [not_null]
+      - name: value_ugl
+        description: Result in micrograms per liter. Empty for non-detects.
+      - name: is_over_4ppt
+        description: True for a PFOA or PFOS result at or above 4 parts per trillion.
+        data_tests: [not_null]
+
+  - name: stg_ucmr5_zip
+    description: ZIP codes served by each water system, one row per system and ZIP.
+    columns:
+      - name: pwsid
+        description: Public water system ID.
+        data_tests: [not_null]
+      - name: zip5
+        description: Five-character ZIP code.
+        data_tests: [not_null]
+
+  - name: stg_zcta_county
+    description: One county per ZIP area (ZCTA), the county covering most of its land.
+    columns:
+      - name: zcta5
+        description: ZIP area code.
+        data_tests: [not_null, unique]
+      - name: county_fips
+        description: Five-digit county code (state plus county).
+        data_tests: [not_null]
+      - name: land_share
+        description: Share of the ZIP area's land that lies in the chosen county.
+        data_tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: stg_cbp_county_naics
+    description: Business establishments by county and target business type, all sizes and legal forms.
+    columns:
+      - name: county_fips
+        description: Five-digit county code.
+        data_tests: [not_null]
+      - name: naics
+        description: NAICS industry code.
+        data_tests: [not_null]
+      - name: estab
+        description: Number of business establishments.
+
+  - name: stg_acs_population
+    description: Total population by county.
+    columns:
+      - name: county_fips
+        description: Five-digit county code.
+        data_tests: [not_null, unique]
+      - name: pop_county
+        description: Total county population.

@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    description: Raw extracts, all columns text, loaded by extract/load.py (CSV fixtures in CI, Parquet in prod).
+    tables:
+      - name: ucmr5_all
+        description: EPA UCMR 5 sample results, one row per sample and contaminant.
+      - name: ucmr5_zipcodes
+        description: ZIP codes served by each UCMR 5 public water system.
+      - name: zcta_county
+        description: Census ZCTA to county relationship file (one row per ZCTA and county part).
+      - name: cbp_county_naics
+        description: Census County Business Patterns, latest available vintage, by county and NAICS.
+      - name: acs_population
+        description: ACS 5-year total population by county.

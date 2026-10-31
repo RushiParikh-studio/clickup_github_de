@@ -1,0 +1,51 @@
+state,county,NAICS2017,NAICS2017_LABEL,NAME,ESTAB,EMP,EMP_N,EMPSZES,LFO
+48,001,7211,Traveler accommodation,"Alder County, Texas",58,1218,A,001,001
+48,001,7225,Restaurants and other eating places,"Alder County, Texas",5,95,A,001,001
+48,001,622,Hospitals,"Alder County, Texas",29,435,A,001,001
+48,001,311,Food manufacturing,"Alder County, Texas",12,228,A,001,001
+48,001,3121,Beverage manufacturing,"Alder County, Texas",19,95,A,001,001
+48,001,7225,Restaurants and other eating places,"Alder County, Texas",7,40,A,210,001
+48,002,7225,Restaurants and other eating places,"Birch County, Texas",54,1026,A,001,001
+48,002,622,Hospitals,"Birch County, Texas",50,1050,A,001,001
+48,002,311,Food manufacturing,"Birch County, Texas",55,495,A,001,001
+48,002,3121,Beverage manufacturing,"Birch County, Texas",58,1508,A,001,001
+48,002,7225,Restaurants and other eating places,"Birch County, Texas",7,40,A,210,001
+48,003,7211,Traveler accommodation,"Cedar County, Texas",29,609,A,001,001
+48,003,7225,Restaurants and other eating places,"Cedar County, Texas",49,1421,A,001,001
+48,003,622,Hospitals,"Cedar County, Texas",26,0,D,001,001
+48,003,311,Food manufacturing,"Cedar County, Texas",51,816,A,001,001
+48,003,3121,Beverage manufacturing,"Cedar County, Texas",47,846,A,001,001
+48,003,7225,Restaurants and other eating places,"Cedar County, Texas",7,40,A,210,001
+48,004,7211,Traveler accommodation,"Dune County, Texas",44,1232,A,001,001
+48,004,7225,Restaurants and other eating places,"Dune County, Texas",2,48,A,001,001
+48,004,311,Food manufacturing,"Dune County, Texas",51,714,A,001,001
+48,004,3121,Beverage manufacturing,"Dune County, Texas",13,91,A,001,001
+48,004,7225,Restaurants and other eating places,"Dune County, Texas",7,40,A,210,001
+37,001,7211,Traveler accommodation,"Elm County, North Carolina",55,495,A,001,001
+37,001,7225,Restaurants and other eating places,"Elm County, North Carolina",35,805,A,001,001
+37,001,622,Hospitals,"Elm County, North Carolina",48,1296,A,001,001
+37,001,3121,Beverage manufacturing,"Elm County, North Carolina",50,950,A,001,001
+37,001,7225,Restaurants and other eating places,"Elm County, North Carolina",7,40,A,210,001
+37,002,7211,Traveler accommodation,"Fir County, North Carolina",47,1128,A,001,001
+37,002,7225,Restaurants and other eating places,"Fir County, North Carolina",3,57,A,001,001
+37,002,622,Hospitals,"Fir County, North Carolina",38,1026,A,001,001
+37,002,311,Food manufacturing,"Fir County, North Carolina",56,1568,A,001,001
+37,002,3121,Beverage manufacturing,"Fir County, North Carolina",48,1104,A,001,001
+37,002,7225,Restaurants and other eating places,"Fir County, North Carolina",7,40,A,210,001
+37,003,7211,Traveler accommodation,"Gum County, North Carolina",36,576,A,001,001
+37,003,7225,Restaurants and other eating places,"Gum County, North Carolina",24,336,A,001,001
+37,003,622,Hospitals,"Gum County, North Carolina",58,1044,A,001,001
+37,003,311,Food manufacturing,"Gum County, North Carolina",48,384,A,001,001
+37,003,7225,Restaurants and other eating places,"Gum County, North Carolina",7,40,A,210,001
+06,001,7211,Traveler accommodation,"Hazel County, California",26,416,A,001,001
+06,001,7225,Restaurants and other eating places,"Hazel County, California",34,442,A,001,001
+06,001,622,Hospitals,"Hazel County, California",24,456,A,001,001
+06,001,311,Food manufacturing,"Hazel County, California",52,728,A,001,001
+06,001,3121,Beverage manufacturing,"Hazel County, California",50,550,A,001,001
+06,001,7225,Restaurants and other eating places,"Hazel County, California",7,40,A,210,001
+06,002,7211,Traveler accommodation,"Ivy County, California",12,264,A,001,001
+06,002,7225,Restaurants and other eating places,"Ivy County, California",25,275,A,001,001
+06,002,622,Hospitals,"Ivy County, California",49,490,A,001,001
+06,002,311,Food manufacturing,"Ivy County, California",49,1421,A,001,001
+06,002,3121,Beverage manufacturing,"Ivy County, California",25,550,A,001,001
+06,002,7225,Restaurants and other eating places,"Ivy County, California",7,40,A,210,001

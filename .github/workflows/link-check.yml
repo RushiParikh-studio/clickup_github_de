@@ -10,6 +10,7 @@ permissions:
 jobs:
   link-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Require a DIN id in branch or PR title
         if: github.actor != 'dependabot[bot]'
