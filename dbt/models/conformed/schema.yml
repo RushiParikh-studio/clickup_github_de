@@ -77,6 +77,9 @@ models:
         description: Hotels, restaurants, hospitals, food and beverage manufacturers in the county.
         data_type: bigint
         data_tests: [not_null]
+      - name: target_estab_per_100k
+        description: Target businesses per 100,000 residents (ACS population); null without a population match.
+        data_type: double
       - name: opportunity_score
         description: Share over 4 ppt times ln(1 + target businesses). Higher means a better territory.
         data_type: double
@@ -86,7 +89,7 @@ models:
         data_type: bigint
         data_tests: [unique]
       - name: rank_state
-        description: Rank within the state among ranked counties, 1 is best; NULL when unranked.
+        description: Rank within the state among ranked counties, 1 is best; no-population counties last; NULL when unranked.
         data_type: bigint
 
 unit_tests:
@@ -116,9 +119,9 @@ unit_tests:
     expect:
       rows:
         # 48001: 0.5*ln(100); 48002: 1.0*ln(4); 37001: no businesses -> 0, and 1 tested system < 3 -> unranked
-        - {county_fips: "48001", county_name: "Alder County", state: "TX", opportunity_score: 2.302585092994046, target_estab_total: 99, rank_national: 1, rank_state: 1}
-        - {county_fips: "48002", county_name: "Birch County", state: "TX", opportunity_score: 1.3862943611198906, target_estab_total: 3, rank_national: 2, rank_state: 2}
-        - {county_fips: "37001", county_name: "Elm County", state: "NC", opportunity_score: 0.0, target_estab_total: 0, rank_national: null, rank_state: null}
+        - {county_fips: "48001", county_name: "Alder County", state: "TX", opportunity_score: 2.302585092994046, target_estab_total: 99, target_estab_per_100k: 9900.0, rank_national: 1, rank_state: 1}
+        - {county_fips: "48002", county_name: "Birch County", state: "TX", opportunity_score: 1.3862943611198906, target_estab_total: 3, target_estab_per_100k: 600.0, rank_national: 2, rank_state: 2}
+        - {county_fips: "37001", county_name: "Elm County", state: "NC", opportunity_score: 0.0, target_estab_total: 0, target_estab_per_100k: 0.0, rank_national: null, rank_state: null}
 
   - name: zcta_largest_land_part_wins
     model: stg_zcta_county
