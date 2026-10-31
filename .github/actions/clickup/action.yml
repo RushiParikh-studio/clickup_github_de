@@ -1,5 +1,5 @@
 name: clickup
-description: Update a ClickUp task (comment, custom field, status) via the REST API. Skips when no token.
+description: Update a ClickUp task (comment, custom field, status) via the REST API. Never fails the calling job; skips when token or task id is missing or rejected.
 inputs:
   task_id:
     description: Custom task id such as DIN-7
@@ -28,10 +28,15 @@ inputs:
     description: upsert or append
     required: false
     default: upsert
+outputs:
+  ok:
+    description: "true if every ClickUp call succeeded, otherwise false (skipped or failed)"
+    value: ${{ steps.run.outputs.ok }}
 runs:
   using: composite
   steps:
-    - shell: bash
+    - id: run
+      shell: bash
       env:
         IN_TASK: ${{ inputs.task_id }}
         IN_COMMENT: ${{ inputs.comment }}
@@ -43,67 +48,98 @@ runs:
       run: |
         set -euo pipefail
         if [ -z "${CLICKUP_TOKEN:-}" ]; then
-          echo "ClickUp step skipped (no token)"
+          echo "::notice::No ClickUp token; ClickUp reporting skipped"
+          echo "ok=false" >> "$GITHUB_OUTPUT"
           exit 0
         fi
         if [ -z "$IN_TASK" ]; then
-          echo "ClickUp step skipped (no task id)"
+          echo "::notice::No task id; ClickUp reporting skipped"
+          echo "ok=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        if [ -z "${CLICKUP_TEAM_ID:-}" ]; then
+          echo "::notice::CLICKUP_TEAM_ID unset; ClickUp reporting skipped"
+          echo "ok=false" >> "$GITHUB_OUTPUT"
           exit 0
         fi
         BASE="https://api.clickup.com/api/v2"
+        CURL="curl -sS --max-time 20 --retry 2"
 
-        # call METHOD PATH [JSON]; prints body, fails on HTTP >= 400
+        # Preflight: token must be accepted
+        code=$($CURL -o /dev/null -w '%{http_code}' "$BASE/user" \
+          -H "Authorization: $CLICKUP_TOKEN" || true)
+        if [ "$code" != "200" ]; then
+          echo "::warning::ClickUp token rejected (HTTP ${code:-000}); ClickUp reporting skipped"
+          echo "ok=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        failed=0
+        TASK_ENC=$(jq -rn --arg v "$IN_TASK" '$v|@uri')
+        TQ="custom_task_ids=true&team_id=${CLICKUP_TEAM_ID:-}"
+        RESP=""
+
+        # call METHOD PATH [JSON]; sets RESP; never exits non-zero.
+        # On HTTP >= 400 or curl failure: warn (no token), set failed=1; later calls are skipped.
         call() {
           local method="$1" path="$2" data="${3:-}" out code
+          RESP=""
+          [ "$failed" -eq 0 ] || return 0
           out="$(mktemp)"
           if [ -n "$data" ]; then
-            code=$(curl -sS -o "$out" -w '%{http_code}' -X "$method" "$BASE$path" \
-              -H "Authorization: $CLICKUP_TOKEN" -H 'Content-Type: application/json' -d "$data")
+            code=$($CURL -o "$out" -w '%{http_code}' -X "$method" "$BASE$path" \
+              -H "Authorization: $CLICKUP_TOKEN" -H 'Content-Type: application/json' -d "$data" || true)
           else
-            code=$(curl -sS -o "$out" -w '%{http_code}' -X "$method" "$BASE$path" \
-              -H "Authorization: $CLICKUP_TOKEN")
+            code=$($CURL -o "$out" -w '%{http_code}' -X "$method" "$BASE$path" \
+              -H "Authorization: $CLICKUP_TOKEN" || true)
           fi
-          if [ "$code" -ge 400 ]; then
-            echo "ClickUp API $method $path failed: HTTP $code" >&2
-            cat "$out" >&2
-            echo >&2
-            exit 1
+          code="${code:-000}"
+          if [ "$code" = "000" ] || [ "$code" -ge 400 ]; then
+            echo "::warning::ClickUp API $method ${path%%\?*} failed (HTTP $code)"
+            failed=1
+          else
+            RESP="$(cat "$out")"
           fi
-          cat "$out"
+          rm -f "$out"
+          return 0
         }
 
-        task=$(call GET "/task/${IN_TASK}?custom_task_ids=true&team_id=${CLICKUP_TEAM_ID}")
-        id=$(printf '%s' "$task" | jq -r .id)
-        [ -n "$id" ] && [ "$id" != null ] || { echo "Could not resolve $IN_TASK" >&2; exit 1; }
+        # Every task call uses the custom id plus custom_task_ids/team_id.
+        call GET "/task/${TASK_ENC}?${TQ}"
 
         if [ -n "$IN_COMMENT" ]; then
           text="$IN_COMMENT"
           case "$text" in "$IN_PREFIX"*) ;; *) text="$IN_PREFIX $text" ;; esac
           existing=""
-          if [ "$IN_MODE" = "upsert" ]; then
-            comments=$(call GET "/task/${id}/comment")
-            existing=$(printf '%s' "$comments" | jq -r --arg p "$IN_PREFIX" \
-              '[.comments[] | select(.comment_text | startswith($p))][0].id // empty')
+          if [ "$IN_MODE" = "upsert" ] && [ -n "$IN_PREFIX" ]; then
+            call GET "/task/${TASK_ENC}/comment?${TQ}"
+            if [ "$failed" -eq 0 ]; then
+              existing=$(printf '%s' "$RESP" | jq -r --arg p "$IN_PREFIX" \
+                '[.comments[]? | select((.comment_text // "") | startswith($p))][0].id // empty') || existing=""
+            fi
           fi
           if [ -n "$existing" ]; then
             body=$(jq -n --arg t "$text" '{comment_text:$t, assignee:null, resolved:false}')
-            call PUT "/comment/${existing}" "$body" > /dev/null
-            echo "Updated comment $existing"
+            call PUT "/comment/${existing}" "$body"
           else
             body=$(jq -n --arg t "$text" '{comment_text:$t, notify_all:false}')
-            call POST "/task/${id}/comment" "$body" > /dev/null
-            echo "Created comment"
+            call POST "/task/${TASK_ENC}/comment?${TQ}" "$body"
           fi
         fi
 
         if [ -n "$IN_FIELD_ID" ]; then
           body=$(jq -n --arg v "$IN_FIELD_VALUE" '{value:$v}')
-          call POST "/task/${id}/field/${IN_FIELD_ID}" "$body" > /dev/null
-          echo "Set field $IN_FIELD_ID"
+          call POST "/task/${TASK_ENC}/field/${IN_FIELD_ID}?${TQ}" "$body"
         fi
 
         if [ -n "$IN_STATUS" ]; then
           body=$(jq -n --arg s "$IN_STATUS" '{status:$s}')
-          call PUT "/task/${id}" "$body" > /dev/null
-          echo "Set status $IN_STATUS"
+          call PUT "/task/${TASK_ENC}?${TQ}" "$body"
         fi
+
+        if [ "$failed" -eq 0 ]; then
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "ok=false" >> "$GITHUB_OUTPUT"
+        fi
+        exit 0

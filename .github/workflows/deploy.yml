@@ -5,9 +5,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
 permissions:
   contents: read
-  id-token: write
   actions: read
 
 jobs:
@@ -21,7 +24,7 @@ jobs:
       DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v5  # uv reads .python-version + [tool.uv] from pyproject.toml
       - run: uv sync --frozen
 
       # Phase 5: run extract here
@@ -44,6 +47,8 @@ jobs:
           candidates: ${{ github.event.head_commit.message }}
 
       - name: ClickUp deployed
+        id: cu_ok
+        continue-on-error: true  # reporting must not fail a good deploy
         if: success() && steps.din.outputs.task_id != ''
         uses: ./.github/actions/clickup
         with:
@@ -55,6 +60,8 @@ jobs:
           comment: "[Deploy] Deployed to prod by run ↗ ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: ClickUp deploy failed
+        id: cu_fail
+        continue-on-error: true
         if: failure() && steps.din.outputs.task_id != ''
         uses: ./.github/actions/clickup
         with:
@@ -67,3 +74,18 @@ jobs:
       - name: Notice when no DIN id
         if: always() && steps.din.outputs.task_id == ''
         run: echo "::notice::No DIN id in head commit message; ClickUp steps skipped."
+
+      - name: ClickUp summary
+        if: always()
+        env:
+          TASK_ID: ${{ steps.din.outputs.task_id }}
+          OK_SUCCESS: ${{ steps.cu_ok.outputs.ok }}
+          OK_FAIL: ${{ steps.cu_fail.outputs.ok }}
+        run: |
+          if [ -z "$TASK_ID" ]; then
+            echo "ClickUp reporting: skipped (no DIN id)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$OK_SUCCESS" = "true" ] || [ "$OK_FAIL" = "true" ]; then
+            echo "ClickUp reporting: ok ($TASK_ID)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ClickUp reporting: skipped or failed ($TASK_ID; token absent or rejected, or API error)" >> "$GITHUB_STEP_SUMMARY"
+          fi

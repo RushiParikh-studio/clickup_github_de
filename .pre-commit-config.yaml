@@ -1,15 +1,32 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.10
-    hooks:
-      - id: ruff
-      - id: ruff-format
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.24.2
     hooks:
       - id: gitleaks
   - repo: local
     hooks:
+      - id: ruff
+        name: ruff check
+        entry: uv run ruff check
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: ruff format --check
+        entry: uv run ruff format --check
+        language: system
+        types: [python]
+      - id: ty
+        name: ty check
+        entry: uvx ty check
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: check-boundary
+        name: boundary guard (no tokens, e-mails, ids, ClickUp URLs)
+        entry: scripts/check_boundary.sh
+        language: script
+        pass_filenames: false
+        always_run: true
       - id: prepend-din
         name: prepend DIN id from branch
         entry: scripts/prepend_din.sh

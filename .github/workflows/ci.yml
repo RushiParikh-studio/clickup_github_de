@@ -12,6 +12,145 @@ permissions:
   actions: read
 
 jobs:
-  ci:
-    uses: ./.github/workflows/_ci-jobs.yml
-    secrets: inherit
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read  # gitleaks-action lists PR commits
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5  # uv reads .python-version + [tool.uv] from pyproject.toml
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uvx ty check
+      - run: bash scripts/check_boundary.sh
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: ClickUp summary
+        if: always()
+        run: |
+          echo "ClickUp reporting: none from this job (the dbt job reports CI status to ClickUp)" >> "$GITHUB_STEP_SUMMARY"
+
+  tests:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5  # uv reads .python-version + [tool.uv] from pyproject.toml
+      - run: uv sync --frozen
+      - run: uv run pytest -q
+
+      - name: ClickUp summary
+        if: always()
+        run: |
+          echo "ClickUp reporting: none from this job (the dbt job reports CI status to ClickUp)" >> "$GITHUB_STEP_SUMMARY"
+
+  dbt:
+    name: dbt
+    runs-on: ubuntu-latest
+    environment: ci
+    env:
+      CLICKUP_TOKEN: ${{ secrets.CLICKUP_TOKEN }}
+      CLICKUP_TEAM_ID: ${{ vars.CLICKUP_TEAM_ID }}
+      DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5  # uv reads .python-version + [tool.uv] from pyproject.toml
+      - run: uv sync --frozen
+
+      - name: Fetch prod-state
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh run list --workflow deploy.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -n "$run_id" ] && [ "$run_id" != null ]; then
+            gh run download "$run_id" --name prod-state --dir prod-state
+          else
+            echo "No successful deploy run yet; doing a full build."
+          fi
+
+      - name: dbt deps
+        working-directory: dbt
+        run: |
+          if [ -f packages.yml ]; then uv run dbt deps; else echo "no packages.yml"; fi
+
+      - name: dbt build
+        id: build
+        working-directory: dbt
+        run: |
+          if [ -f "$GITHUB_WORKSPACE/prod-state/manifest.json" ]; then
+            uv run dbt build --target ci --select state:modified+ --defer --state "$GITHUB_WORKSPACE/prod-state"
+          else
+            uv run dbt build --target ci
+          fi
+
+      - name: Summarize results
+        id: summary
+        if: always()
+        working-directory: dbt
+        run: |
+          f=target/run_results.json
+          if [ -f "$f" ]; then
+            passed=$(jq '[.results[] | select(.unique_id | startswith("test.")) | select(.status=="pass")] | length' "$f")
+            failed=$(jq '[.results[] | select(.unique_id | startswith("test.")) | select(.status=="fail" or .status=="error")] | length' "$f")
+            models=$(jq '[.results[] | select(.unique_id | startswith("model."))] | length' "$f")
+          else
+            passed=0; failed=0; models=0
+          fi
+          echo "dq=$passed passed, $failed failed" >> "$GITHUB_OUTPUT"
+          echo "passed=$passed" >> "$GITHUB_OUTPUT"
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+          echo "models=$models" >> "$GITHUB_OUTPUT"
+
+      - name: Find DIN id
+        id: din
+        if: always()
+        uses: ./.github/actions/din-id
+        with:
+          candidates: |
+            ${{ github.head_ref }}
+            ${{ github.event.pull_request.title }}
+
+      - name: ClickUp CI status and comment
+        id: cu_ci
+        continue-on-error: true  # reporting must not block merges
+        if: always() && steps.din.outputs.task_id != ''
+        uses: ./.github/actions/clickup
+        with:
+          task_id: ${{ steps.din.outputs.task_id }}
+          field_id: 6878067a-1dd1-4656-8de3-b17bb32a0989
+          field_value: ${{ steps.build.outcome == 'success' && 'df2e16ab-bfd4-4270-a7d5-0e80548bc726' || '51f3f133-3284-45ef-b64c-4b073b02d053' }}
+          comment_prefix: "[CI]"
+          comment: "[CI] CI #${{ github.run_number }} · dbt ${{ steps.build.outcome }} · ${{ steps.summary.outputs.models }} models, ${{ steps.summary.outputs.passed }} tests passed, ${{ steps.summary.outputs.failed }} failed · run ↗ ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: ClickUp DQ tests
+        id: cu_dq
+        continue-on-error: true  # reporting must not block merges
+        if: always() && steps.din.outputs.task_id != ''
+        uses: ./.github/actions/clickup
+        with:
+          task_id: ${{ steps.din.outputs.task_id }}
+          field_id: 9b38aed2-3eb7-4a5f-92ad-73b29159ebc8
+          field_value: ${{ steps.summary.outputs.dq || 'n/a' }}
+
+      - name: ClickUp summary
+        if: always()
+        env:
+          TASK_ID: ${{ steps.din.outputs.task_id }}
+          OK_CI: ${{ steps.cu_ci.outputs.ok }}
+          OK_DQ: ${{ steps.cu_dq.outputs.ok }}
+        run: |
+          if [ -z "$TASK_ID" ]; then
+            echo "ClickUp reporting: skipped (no DIN id)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$OK_CI" = "true" ] && [ "$OK_DQ" = "true" ]; then
+            echo "ClickUp reporting: ok ($TASK_ID)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ClickUp reporting: skipped or failed ($TASK_ID; token absent or rejected, or API error)" >> "$GITHUB_STEP_SUMMARY"
+          fi

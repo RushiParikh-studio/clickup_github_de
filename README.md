@@ -20,4 +20,6 @@ uv run pre-commit install --hook-type pre-commit --hook-type commit-msg
 make ci            # ruff, pytest, dbt build --target ci
 ```
 
+Python version is pinned in `.python-version`; change it there and run `uv sync`. The Makefile and `[tool.uv]` use the managed interpreter (`UV_PYTHON_PREFERENCE=managed`) so the exact `.python-version` pin wins over any system Python.
+
 Copy `.env.example` to `.env` and fill values locally; never commit `.env`.

@@ -16,9 +16,10 @@ runs:
       env:
         CANDIDATES: ${{ inputs.candidates }}
       run: |
+        set -euo pipefail
         id=""
         while IFS= read -r line; do
-          m=$(printf '%s' "$line" | grep -oE 'DIN-[0-9]+' | head -1 || true)
+          m=$(printf '%s' "$line" | grep -oE '(^|[^A-Za-z0-9])DIN-[0-9]+' | head -1 | grep -oE 'DIN-[0-9]+' || true)
           if [ -n "$m" ]; then id="$m"; break; fi
         done <<< "$CANDIDATES"
         echo "task_id=$id" >> "$GITHUB_OUTPUT"
