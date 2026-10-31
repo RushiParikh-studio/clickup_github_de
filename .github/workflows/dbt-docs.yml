@@ -1,17 +1,29 @@
 name: dbt-docs
 
+# Runs after a successful prod deploy so the Pages site carries that run's published dashboard and top 20.
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: [deploy]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
 jobs:
   docs:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -19,19 +31,38 @@ jobs:
       DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: astral-sh/setup-uv@v5  # uv reads .python-version + [tool.uv] from pyproject.toml
       - run: uv sync --frozen
-      - name: Generate docs
-        working-directory: dbt
+      - name: Generate dbt docs (schema and lineage from fixtures)
         run: |
-          uv run dbt seed --target ci
+          uv run python scripts/load_fixtures.py
+          cd dbt
+          uv run dbt build --target ci
           uv run dbt docs generate --target ci
+      - name: Fetch published outputs from the deploy run
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          if [ -z "$RUN_ID" ]; then
+            RUN_ID=$(gh run list --workflow deploy.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          fi
+          if [ -n "$RUN_ID" ] && [ "$RUN_ID" != null ]; then
+            gh run download "$RUN_ID" --name published --dir published
+          else
+            echo "No successful deploy run yet; site will carry dbt docs only."
+          fi
       - name: Assemble site
         run: |
           mkdir -p site
-          cp -r dbt/target/. site/
-          rm -f site/*.duckdb
-          if [ -f docs/dashboard.html ]; then cp docs/dashboard.html site/; fi
+          # Allowlist only: never publish compiled SQL, run results or DuckDB files.
+          for f in index.html manifest.json catalog.json; do cp "dbt/target/$f" site/; done
+          for f in dashboard.html top20.md top20.json; do
+            if [ -f "published/$f" ]; then cp "published/$f" site/; fi
+          done
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

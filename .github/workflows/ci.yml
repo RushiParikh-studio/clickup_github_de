@@ -15,6 +15,7 @@ jobs:
   lint:
     name: lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       pull-requests: read  # gitleaks-action lists PR commits
@@ -40,6 +41,7 @@ jobs:
   tests:
     name: tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5  # uv reads .python-version + [tool.uv] from pyproject.toml
@@ -54,10 +56,9 @@ jobs:
   dbt:
     name: dbt
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: ci
     env:
-      CLICKUP_TOKEN: ${{ secrets.CLICKUP_TOKEN }}
-      CLICKUP_TEAM_ID: ${{ vars.CLICKUP_TEAM_ID }}
       DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
     steps:
       - uses: actions/checkout@v4
@@ -76,6 +77,9 @@ jobs:
             echo "No successful deploy run yet; doing a full build."
           fi
 
+      - name: Load fixtures into the ci DuckDB file
+        run: uv run python scripts/load_fixtures.py
+
       - name: dbt deps
         working-directory: dbt
         run: |
@@ -85,8 +89,10 @@ jobs:
         id: build
         working-directory: dbt
         run: |
+          # Slim CI: modified nodes, their children and their parents, all built from fixtures in ci.duckdb.
+          # No --defer: deferred refs would point at the prod DuckDB file, which CI never has.
           if [ -f "$GITHUB_WORKSPACE/prod-state/manifest.json" ]; then
-            uv run dbt build --target ci --select state:modified+ --defer --state "$GITHUB_WORKSPACE/prod-state"
+            uv run dbt build --target ci --select "+state:modified+" --state "$GITHUB_WORKSPACE/prod-state"
           else
             uv run dbt build --target ci
           fi
@@ -123,6 +129,9 @@ jobs:
         continue-on-error: true  # reporting must not block merges
         if: always() && steps.din.outputs.task_id != ''
         uses: ./.github/actions/clickup
+        env:
+          CLICKUP_TOKEN: ${{ secrets.CLICKUP_TOKEN }}
+          CLICKUP_TEAM_ID: ${{ vars.CLICKUP_TEAM_ID }}
         with:
           task_id: ${{ steps.din.outputs.task_id }}
           field_id: 6878067a-1dd1-4656-8de3-b17bb32a0989
@@ -135,6 +144,9 @@ jobs:
         continue-on-error: true  # reporting must not block merges
         if: always() && steps.din.outputs.task_id != ''
         uses: ./.github/actions/clickup
+        env:
+          CLICKUP_TOKEN: ${{ secrets.CLICKUP_TOKEN }}
+          CLICKUP_TEAM_ID: ${{ vars.CLICKUP_TEAM_ID }}
         with:
           task_id: ${{ steps.din.outputs.task_id }}
           field_id: 9b38aed2-3eb7-4a5f-92ad-73b29159ebc8

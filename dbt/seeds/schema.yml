@@ -1,0 +1,12 @@
+version: 2
+
+seeds:
+  - name: state_fips
+    description: State and territory FIPS codes with USPS abbreviations.
+    columns:
+      - name: state_fips
+        data_tests: [not_null, unique]
+      - name: state_abbr
+        data_tests: [not_null, unique]
+  - name: naics_targets
+    description: Target industries for the commercial density dimension.

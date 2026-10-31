@@ -4,10 +4,25 @@ config-version: 2
 profile: agua_us_ingestion
 model-paths: ["models"]
 seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
 target-path: target
 clean-targets: ["target"]
+
+seeds:
+  agua_us_ingestion:
+    state_fips:
+      +column_types:
+        state_fips: varchar
+        state_abbr: varchar
+        state_name: varchar
+    naics_targets:
+      +column_types:
+        naics: varchar
 
 models:
   agua_us_ingestion:
     staging:
       +materialized: view
+    conformed:
+      +materialized: table

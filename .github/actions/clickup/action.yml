@@ -65,14 +65,19 @@ runs:
         BASE="https://api.clickup.com/api/v2"
         CURL="curl -sS --max-time 20 --retry 2"
 
-        # Preflight: token must be accepted
-        code=$($CURL -o /dev/null -w '%{http_code}' "$BASE/user" \
+        # Preflight: token must be accepted. Log the username (never the token) so the state is visible.
+        pre="$(mktemp)"
+        code=$($CURL -o "$pre" -w '%{http_code}' "$BASE/user" \
           -H "Authorization: $CLICKUP_TOKEN" || true)
         if [ "$code" != "200" ]; then
+          rm -f "$pre"
           echo "::warning::ClickUp token rejected (HTTP ${code:-000}); ClickUp reporting skipped"
           echo "ok=false" >> "$GITHUB_OUTPUT"
           exit 0
         fi
+        cu_user=$(jq -r '.user.username // "unknown"' "$pre" 2>/dev/null | tr -cd 'A-Za-z0-9 ._-' | cut -c1-64) || cu_user=unknown
+        rm -f "$pre"
+        echo "::notice::ClickUp token ok (user ${cu_user:-unknown})"
 
         failed=0
         TASK_ENC=$(jq -rn --arg v "$IN_TASK" '$v|@uri')

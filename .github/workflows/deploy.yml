@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      task_id:
+        description: "ClickUp custom task id, e.g. DIN-202, used when the run is not triggered by a push"
+        required: false
+        type: string
 
 concurrency:
   group: deploy-prod
@@ -16,22 +21,39 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     environment: prod
     env:
-      CLICKUP_TOKEN: ${{ secrets.CLICKUP_TOKEN }}
-      CLICKUP_TEAM_ID: ${{ vars.CLICKUP_TEAM_ID }}
-      CENSUS_API_KEY: ${{ secrets.CENSUS_API_KEY }}
       DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5  # uv reads .python-version + [tool.uv] from pyproject.toml
       - run: uv sync --frozen
 
-      # Phase 5: run extract here
+      - name: Cache public source files (UCMR 5 zip, ZCTA-county relationship file)
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/raw/ucmr5-occurrence-data.zip
+            data/raw/tab20_zcta520_county20_natl.txt
+          key: raw-sources-v1-${{ hashFiles('extract/ucmr5.py', 'extract/zcta_county.py') }}
+
+      - name: Extract (UCMR 5, ZCTA-county, CBP, ACS)
+        env:
+          CENSUS_API_KEY: ${{ secrets.CENSUS_API_KEY }}  # scoped to this step only
+        run: uv run python -m extract --out data/raw
+
+      - name: Load raw tables into the prod DuckDB file
+        run: uv run python -m extract.load --src data/raw --db dbt/target/prod.duckdb
 
       - name: dbt build (prod)
         working-directory: dbt
         run: uv run dbt build --target prod
+
+      - name: Publish top 20 and dashboard
+        run: |
+          uv run python -m publish.top20 --db dbt/target/prod.duckdb --out docs
+          cat docs/top20.md >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -39,18 +61,36 @@ jobs:
           path: dbt/target/manifest.json
           retention-days: 90
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: published
+          path: |
+            docs/top20.md
+            docs/top20.json
+            docs/dashboard.html
+          retention-days: 90
+
+      # PHASE 6 PLACEHOLDER: refresh the ClickUp Doc page from docs/top20.md (not wired yet; no-op).
+      - name: "Phase 6 placeholder: refresh ClickUp Doc"
+        run: echo "::notice::Phase 6 placeholder; ClickUp Doc refresh is not wired yet."
+
       - name: Find DIN id
         id: din
         if: always()
         uses: ./.github/actions/din-id
         with:
-          candidates: ${{ github.event.head_commit.message }}
+          candidates: |
+            ${{ inputs.task_id }}
+            ${{ github.event.head_commit.message }}
 
       - name: ClickUp deployed
         id: cu_ok
         continue-on-error: true  # reporting must not fail a good deploy
         if: success() && steps.din.outputs.task_id != ''
         uses: ./.github/actions/clickup
+        env:
+          CLICKUP_TOKEN: ${{ secrets.CLICKUP_TOKEN }}
+          CLICKUP_TEAM_ID: ${{ vars.CLICKUP_TEAM_ID }}
         with:
           task_id: ${{ steps.din.outputs.task_id }}
           field_id: 598adfb7-d6aa-4763-a608-463f1f63120c
@@ -64,6 +104,9 @@ jobs:
         continue-on-error: true
         if: failure() && steps.din.outputs.task_id != ''
         uses: ./.github/actions/clickup
+        env:
+          CLICKUP_TOKEN: ${{ secrets.CLICKUP_TOKEN }}
+          CLICKUP_TEAM_ID: ${{ vars.CLICKUP_TEAM_ID }}
         with:
           task_id: ${{ steps.din.outputs.task_id }}
           field_id: 598adfb7-d6aa-4763-a608-463f1f63120c
@@ -73,7 +116,7 @@ jobs:
 
       - name: Notice when no DIN id
         if: always() && steps.din.outputs.task_id == ''
-        run: echo "::notice::No DIN id in head commit message; ClickUp steps skipped."
+        run: echo "::notice::No DIN id in the task_id input or the head commit message; ClickUp steps skipped."
 
       - name: ClickUp summary
         if: always()
