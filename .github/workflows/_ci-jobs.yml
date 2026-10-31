@@ -107,6 +107,7 @@ jobs:
             ${{ github.event.pull_request.title }}
 
       - name: ClickUp CI status
+        continue-on-error: true  # reporting must not block merges
         if: always() && steps.din.outputs.task_id != ''
         uses: ./.github/actions/clickup
         with:
@@ -115,6 +116,7 @@ jobs:
           field_value: ${{ steps.build.outcome == 'success' && 'df2e16ab-bfd4-4270-a7d5-0e80548bc726' || '51f3f133-3284-45ef-b64c-4b073b02d053' }}
 
       - name: ClickUp DQ tests
+        continue-on-error: true  # reporting must not block merges
         if: always() && steps.din.outputs.task_id != ''
         uses: ./.github/actions/clickup
         with:
@@ -123,6 +125,7 @@ jobs:
           field_value: ${{ steps.summary.outputs.dq }}
 
       - name: ClickUp CI comment
+        continue-on-error: true  # reporting must not block merges
         if: always() && steps.din.outputs.task_id != ''
         uses: ./.github/actions/clickup
         with:
