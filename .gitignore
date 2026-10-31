@@ -266,3 +266,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project
+dbt/target/
+dbt/logs/
+data/raw/
+*.duckdb
+prod-state/

@@ -1,0 +1,109 @@
+name: clickup
+description: Update a ClickUp task (comment, custom field, status) via the REST API. Skips when no token.
+inputs:
+  task_id:
+    description: Custom task id such as DIN-7
+    required: true
+  comment:
+    description: Comment text (optional)
+    required: false
+    default: ""
+  comment_prefix:
+    description: Prefix identifying the comment to upsert
+    required: false
+    default: "[CI]"
+  field_id:
+    description: Custom field id (optional)
+    required: false
+    default: ""
+  field_value:
+    description: Field value; option UUID for dropdowns
+    required: false
+    default: ""
+  status:
+    description: New task status (optional)
+    required: false
+    default: ""
+  mode:
+    description: upsert or append
+    required: false
+    default: upsert
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        IN_TASK: ${{ inputs.task_id }}
+        IN_COMMENT: ${{ inputs.comment }}
+        IN_PREFIX: ${{ inputs.comment_prefix }}
+        IN_FIELD_ID: ${{ inputs.field_id }}
+        IN_FIELD_VALUE: ${{ inputs.field_value }}
+        IN_STATUS: ${{ inputs.status }}
+        IN_MODE: ${{ inputs.mode }}
+      run: |
+        set -euo pipefail
+        if [ -z "${CLICKUP_TOKEN:-}" ]; then
+          echo "ClickUp step skipped (no token)"
+          exit 0
+        fi
+        if [ -z "$IN_TASK" ]; then
+          echo "ClickUp step skipped (no task id)"
+          exit 0
+        fi
+        BASE="https://api.clickup.com/api/v2"
+
+        # call METHOD PATH [JSON]; prints body, fails on HTTP >= 400
+        call() {
+          local method="$1" path="$2" data="${3:-}" out code
+          out="$(mktemp)"
+          if [ -n "$data" ]; then
+            code=$(curl -sS -o "$out" -w '%{http_code}' -X "$method" "$BASE$path" \
+              -H "Authorization: $CLICKUP_TOKEN" -H 'Content-Type: application/json' -d "$data")
+          else
+            code=$(curl -sS -o "$out" -w '%{http_code}' -X "$method" "$BASE$path" \
+              -H "Authorization: $CLICKUP_TOKEN")
+          fi
+          if [ "$code" -ge 400 ]; then
+            echo "ClickUp API $method $path failed: HTTP $code" >&2
+            cat "$out" >&2
+            echo >&2
+            exit 1
+          fi
+          cat "$out"
+        }
+
+        task=$(call GET "/task/${IN_TASK}?custom_task_ids=true&team_id=${CLICKUP_TEAM_ID}")
+        id=$(printf '%s' "$task" | jq -r .id)
+        [ -n "$id" ] && [ "$id" != null ] || { echo "Could not resolve $IN_TASK" >&2; exit 1; }
+
+        if [ -n "$IN_COMMENT" ]; then
+          text="$IN_COMMENT"
+          case "$text" in "$IN_PREFIX"*) ;; *) text="$IN_PREFIX $text" ;; esac
+          existing=""
+          if [ "$IN_MODE" = "upsert" ]; then
+            comments=$(call GET "/task/${id}/comment")
+            existing=$(printf '%s' "$comments" | jq -r --arg p "$IN_PREFIX" \
+              '[.comments[] | select(.comment_text | startswith($p))][0].id // empty')
+          fi
+          if [ -n "$existing" ]; then
+            body=$(jq -n --arg t "$text" '{comment_text:$t, assignee:null, resolved:false}')
+            call PUT "/comment/${existing}" "$body" > /dev/null
+            echo "Updated comment $existing"
+          else
+            body=$(jq -n --arg t "$text" '{comment_text:$t, notify_all:false}')
+            call POST "/task/${id}/comment" "$body" > /dev/null
+            echo "Created comment"
+          fi
+        fi
+
+        if [ -n "$IN_FIELD_ID" ]; then
+          body=$(jq -n --arg v "$IN_FIELD_VALUE" '{value:$v}')
+          call POST "/task/${id}/field/${IN_FIELD_ID}" "$body" > /dev/null
+          echo "Set field $IN_FIELD_ID"
+        fi
+
+        if [ -n "$IN_STATUS" ]; then
+          body=$(jq -n --arg s "$IN_STATUS" '{status:$s}')
+          call PUT "/task/${id}" "$body" > /dev/null
+          echo "Set status $IN_STATUS"
+        fi

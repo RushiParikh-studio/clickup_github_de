@@ -1,0 +1,69 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      CLICKUP_TOKEN: ${{ secrets.CLICKUP_TOKEN }}
+      CLICKUP_TEAM_ID: ${{ vars.CLICKUP_TEAM_ID }}
+      CENSUS_API_KEY: ${{ secrets.CENSUS_API_KEY }}
+      DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+
+      # Phase 5: run extract here
+
+      - name: dbt build (prod)
+        working-directory: dbt
+        run: uv run dbt build --target prod
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prod-state
+          path: dbt/target/manifest.json
+          retention-days: 90
+
+      - name: Find DIN id
+        id: din
+        if: always()
+        uses: ./.github/actions/din-id
+        with:
+          candidates: ${{ github.event.head_commit.message }}
+
+      - name: ClickUp deployed
+        if: success() && steps.din.outputs.task_id != ''
+        uses: ./.github/actions/clickup
+        with:
+          task_id: ${{ steps.din.outputs.task_id }}
+          field_id: 598adfb7-d6aa-4763-a608-463f1f63120c
+          field_value: 25f48fc4-3b69-40d3-af12-3ddcf6141c9b
+          status: done
+          comment_prefix: "[Deploy]"
+          comment: "[Deploy] Deployed to prod by run ↗ ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: ClickUp deploy failed
+        if: failure() && steps.din.outputs.task_id != ''
+        uses: ./.github/actions/clickup
+        with:
+          task_id: ${{ steps.din.outputs.task_id }}
+          field_id: 598adfb7-d6aa-4763-a608-463f1f63120c
+          field_value: 4766d7f8-dced-4a2f-bde6-83a32f8fdd62
+          comment_prefix: "[Deploy]"
+          comment: "[Deploy] failed ↗ ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Notice when no DIN id
+        if: always() && steps.din.outputs.task_id == ''
+        run: echo "::notice::No DIN id in head commit message; ClickUp steps skipped."

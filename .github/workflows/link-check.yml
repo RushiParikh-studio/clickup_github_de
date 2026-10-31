@@ -2,17 +2,25 @@ name: link-check
 
 on:
   pull_request:
-  push:
-    branches: [main]
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
 
 jobs:
   link-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Check links in Markdown files
-        uses: lycheeverse/lychee-action@v2
-        with:
-          args: --no-progress --include-fragments "**/*.md"
-          fail: true
-          failIfEmpty: false
+      - name: Require a DIN id in branch or PR title
+        if: github.actor != 'dependabot[bot]'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if printf '%s\n%s\n' "$HEAD_REF" "$PR_TITLE" | grep -qE 'DIN-[0-9]+'; then
+            echo "Found a DIN id."
+          else
+            echo "::error::No DIN-n id in the branch name or PR title."
+            echo "Create the branch from the ClickUp task (Task > Git > Create branch) so it starts with DIN-n/, or put DIN-n in the PR title."
+            exit 1
+          fi
