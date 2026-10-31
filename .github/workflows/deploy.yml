@@ -57,13 +57,13 @@ jobs:
           uv run python -m publish.top20 --db dbt/target/prod.duckdb --out docs
           cat docs/top20.md >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: prod-state
           path: dbt/target/manifest.json
           retention-days: 90
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: published
           path: |
