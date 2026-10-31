@@ -46,6 +46,11 @@ extract/  (UCMR 5 zip, ZCTA-county file, CBP, ACS -> data/raw/*.parquet, all VAR
 - `deploy` uploads `prod-state` (dbt manifest) and `published` (top 20 + dashboard); `dbt-docs` runs after a successful
   deploy and puts dbt docs plus the dashboard on GitHub Pages. A manual deploy can take a `task_id` input (`DIN-n`)
   so ClickUp reporting runs without a push.
+- After publishing, `deploy` runs `publish/clickup_doc.py`, which replaces the content of the ClickUp Doc page
+  `CLICKUP_PAGE_ID` (Doc `CLICKUP_DOC_ID`, both workflow constants) with `docs/top20.md` through the v3 Edit a Page
+  endpoint, prefixed by a line naming the run and date. It needs `CLICKUP_TOKEN` and `CLICKUP_TEAM_ID`; if the token is
+  missing or the API answers non-2xx it only emits a `::warning::`, so a Doc refresh never fails a deploy.
+
 - Small-sample guard: only counties with at least `min_systems_tested` tested systems (dbt var, default 3) get
   `rank_national` / `rank_state`; others keep share and score with NULL ranks, and the top 20 is drawn from ranked
   counties. Override with `dbt build --vars '{min_systems_tested: 5}'`.
