@@ -30,9 +30,8 @@ jobs:
     env:
       DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
     steps:
+      # Default-branch checkout only (never the triggering run's ref) in this privileged job.
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: astral-sh/setup-uv@v5  # uv reads .python-version + [tool.uv] from pyproject.toml
       - run: uv sync --frozen
       - name: Generate dbt docs (schema and lineage from fixtures)

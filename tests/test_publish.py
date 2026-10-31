@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import re
+from html.parser import HTMLParser
 from pathlib import Path
 
 import duckdb
@@ -62,12 +62,42 @@ def test_json_roundtrip(rows: list[dict[str, object]]) -> None:
     assert doc["rows"][4]["pop_county"] is None
 
 
+class _NonScript(HTMLParser):
+    """Collect markup and text that is not inside <script> elements."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.depth = 0
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "script":
+            self.depth += 1
+        elif not self.depth:
+            self.parts.append(self.get_starttag_text() or "")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script":
+            self.depth = max(0, self.depth - 1)
+
+    def handle_data(self, data: str) -> None:
+        if not self.depth:
+            self.parts.append(data)
+
+
+def _outside_scripts(page: str) -> str:
+    parser = _NonScript()
+    parser.feed(page)
+    parser.close()
+    return "".join(parser.parts)
+
+
 def test_html_static_and_escaped(rows: list[dict[str, object]]) -> None:
     page = render_dashboard(rows, "now")
     assert "<script src=" not in page
     assert "<link" not in page
     # plotly.js itself holds unused CDN strings (map tiles/icons); check everything else
-    outside = re.sub(r"<script.*?</script>", "", page, flags=re.S)
+    outside = _outside_scripts(page)
     assert "http" not in outside
     assert "A&amp;B &lt;Test&gt; County" in page
     assert "A&B <Test>" not in page
