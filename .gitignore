@@ -151,6 +151,9 @@ activemq-data/
 
 # Environments
 .env
+.env.*
+!.env.example
+!.env.template
 .envrc
 .venv
 env/
@@ -158,6 +161,43 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Secrets / API keys / credentials
+secrets/
+secrets.*
+*.secret
+*.secrets
+*_secret*
+*apikey*
+*api_key*
+credentials*
+*credentials*.json
+service-account*.json
+client_secret*.json
+token.json
+*.token
+.netrc
+.pgpass
+config.ini
+settings.ini
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+id_rsa*
+id_ed25519*
+*.keystore
+*.jks
+.aws/
+.azure/
+.gcloud/
+.ssh/
+.kube/
+*.tfvars
+*.tfvars.json
 
 # Spyder project settings
 .spyderproject
@@ -197,13 +237,21 @@ cython_debug/
 .abstra/
 
 # Visual Studio Code
-#   Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore that
-#   can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#   and can be added to the global gitignore or merged into this file. However, if you prefer, you
-#   could uncomment the following to ignore the entire vscode folder
-# .vscode/
+.vscode/
+*.code-workspace
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
+
+# AI assistant / agent tooling (may contain API keys, session data, local config)
+.claude/
+.claude*
+.copilot/
+.copilot*
+.cursor/
+.aider*
+.github-copilot/
+CLAUDE.local.md
+.mcp.json
 
 # Ruff stuff:
 .ruff_cache/

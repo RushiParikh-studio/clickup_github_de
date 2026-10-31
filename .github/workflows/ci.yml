@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Lint with ruff
+        run: |
+          if find . -name "*.py" -not -path "./.git/*" | grep -q .; then
+            pipx run ruff check .
+          else
+            echo "No Python files found — nothing to lint."
+          fi
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run pytest
+        run: |
+          if find . \( -name "test_*.py" -o -name "*_test.py" \) -not -path "./.git/*" | grep -q .; then
+            pip install pytest
+            if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+            pytest
+          else
+            echo "No tests found — nothing to run."
+          fi
+
+  dbt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate dbt project
+        run: |
+          DBT_PROJECT=$(find . -name "dbt_project.yml" -not -path "./.git/*" | head -1)
+          if [ -n "$DBT_PROJECT" ]; then
+            pip install dbt-core
+            cd "$(dirname "$DBT_PROJECT")"
+            dbt parse
+          else
+            echo "No dbt project found — nothing to validate."
+          fi
