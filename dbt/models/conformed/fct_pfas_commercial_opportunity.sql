@@ -27,7 +27,8 @@ joined as (
 scored as (
     select
         *,
-        {{ opportunity_score('share_systems_over_4ppt', 'target_estab_total') }} as opportunity_score
+        {{ opportunity_score('share_systems_over_4ppt', 'target_estab_total') }} as opportunity_score,
+        systems_tested >= {{ var('min_systems_tested', 3) }} as is_ranked
     from joined
 )
 
@@ -41,11 +42,13 @@ select
     pop_county::bigint as pop_county,
     target_estab_total::bigint as target_estab_total,
     opportunity_score::double as opportunity_score,
-    (row_number() over (
+    -- Ranks only for counties with at least min_systems_tested tested systems; others get NULL.
+    (case when is_ranked then row_number() over (
+        partition by is_ranked
         order by opportunity_score desc, target_estab_total desc, county_fips
-    ))::bigint as rank_national,
-    (row_number() over (
-        partition by state
+    ) end)::bigint as rank_national,
+    (case when is_ranked then row_number() over (
+        partition by is_ranked, state
         order by opportunity_score desc, target_estab_total desc, county_fips
-    ))::bigint as rank_state
+    ) end)::bigint as rank_state
 from scored

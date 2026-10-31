@@ -24,7 +24,7 @@ METHOD = (
 CAVEATS = (
     "A system is counted in every county its ZIP codes reach.",
     "ZIP-to-county uses the county with the largest land-area share of the ZCTA.",
-    "Counties with few tested systems can show extreme shares; read with systems tested.",
+    "Only counties with at least 3 tested systems are ranked (dbt var min_systems_tested).",
     "Connecticut counties (2020 legacy counties) have no population or establishment match.",
     "This is a market-sizing signal, not a compliance measure.",
 )
@@ -36,11 +36,15 @@ def _clean(v: object) -> object:
 
 
 def fetch_top(db: Path, limit: int = 20) -> list[Row]:
-    """Return the top rows by national rank; raise SystemExit if the table is missing/empty."""
+    """Return the top ranked rows (rank_national not null); SystemExit if missing or none ranked."""
     con = duckdb.connect(str(db), read_only=True)
     try:
         try:
-            cur = con.execute(f"select * from {TABLE} order by rank_national limit ?", [limit])
+            cur = con.execute(
+                f"select * from {TABLE} where rank_national is not null "
+                "order by rank_national limit ?",
+                [limit],
+            )
         except duckdb.CatalogException as exc:
             raise SystemExit(f"error: table {TABLE} not found in {db}") from exc
         cols = [d[0] for d in cur.description]
@@ -48,7 +52,7 @@ def fetch_top(db: Path, limit: int = 20) -> list[Row]:
     finally:
         con.close()
     if not rows:
-        raise SystemExit(f"error: {TABLE} in {db} is empty")
+        raise SystemExit(f"error: {TABLE} in {db} has no ranked counties")
     return rows
 
 

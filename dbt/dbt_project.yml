@@ -26,3 +26,7 @@ models:
       +materialized: view
     conformed:
       +materialized: table
+
+vars:
+  # Counties with fewer tested systems keep share and score but get no rank (small-sample guard).
+  min_systems_tested: 3

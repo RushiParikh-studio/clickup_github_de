@@ -25,6 +25,11 @@ def make_db(path: Path, n: int = 25) -> Path:
             "insert into main.fct_pfas_commercial_opportunity values (?,?,?,?,?,?,?,?,?,?,?)",
             [f"{i:05d}", name, "TX", 0.5, 10, 5, pop, 100 + i, 30.0 - i, i, i],
         )
+    # Unranked small-sample county with the best score must never be published.
+    con.execute(
+        "insert into main.fct_pfas_commercial_opportunity values (?,?,?,?,?,?,?,?,?,?,?)",
+        ["99999", "Unranked County", "TX", 1.0, 1, 1, 500, 999, 99.0, None, None],
+    )
     con.close()
     return path
 
@@ -36,6 +41,7 @@ def rows(tmp_path: Path) -> list[dict[str, object]]:
 
 def test_fetch_top_ordered(rows: list[dict[str, object]]) -> None:
     assert [r["rank_national"] for r in rows] == list(range(1, 21))
+    assert all(r["county_name"] != "Unranked County" for r in rows)
 
 
 def test_fetch_top_missing_or_empty(tmp_path: Path) -> None:
