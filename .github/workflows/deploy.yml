@@ -29,7 +29,7 @@ jobs:
       CLICKUP_PAGE_ID: 2kydxwy9-294
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5  # uv reads .python-version + [tool.uv] from pyproject.toml
+      - uses: astral-sh/setup-uv@v7  # uv reads .python-version + [tool.uv] from pyproject.toml
       - run: uv sync --frozen
 
       - name: Cache public source files (UCMR 5 zip, ZCTA-county relationship file)
