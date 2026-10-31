@@ -64,6 +64,11 @@ def _int(v: object) -> str:
     return f"{int(_num(v)):,}" if v is not None else "n/a"
 
 
+def _per100k(r: Row) -> str:
+    v = r.get("target_estab_per_100k")
+    return f"{_num(v):.1f}" if v is not None else "n/a"
+
+
 def _cells(r: Row) -> list[str]:
     return [
         str(r["rank_national"]),
@@ -73,6 +78,7 @@ def _cells(r: Row) -> list[str]:
         f"{_int(r['systems_over_4ppt'])} / {_int(r['systems_tested'])}",
         _int(r["target_estab_total"]),
         _int(r["pop_county"]),
+        _per100k(r),
         f"{_num(r['opportunity_score']):.3f}",
         str(r["rank_state"]),
     ]
@@ -86,6 +92,7 @@ HEAD = [
     "Systems over / tested",
     "Target establishments",
     "Population",
+    "Per 100k residents",
     "Score",
     "State rank",
 ]
@@ -111,7 +118,7 @@ def render_dashboard(rows: list[Row], generated_at: str) -> str:
     hover = [
         f"<b>{html.escape(lab)}</b><br>Score {_num(r['opportunity_score']):.3f}"
         f"<br>Share over 4 ppt {_num(r['share_systems_over_4ppt']) * 100:.1f}%"
-        f"<br>Target establishments {_int(r['target_estab_total'])}"
+        f"<br>Target establishments {_int(r['target_estab_total'])} ({_per100k(r)} per 100k)"
         f"<br>State rank {r['rank_state']}"
         for lab, r in zip(labels, rows, strict=True)
     ]
