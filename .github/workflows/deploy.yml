@@ -25,6 +25,8 @@ jobs:
     environment: prod
     env:
       DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
+      CLICKUP_DOC_ID: 2kydxwy9-1074  # not secrets
+      CLICKUP_PAGE_ID: 2kydxwy9-294
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5  # uv reads .python-version + [tool.uv] from pyproject.toml
@@ -70,9 +72,12 @@ jobs:
             docs/dashboard.html
           retention-days: 90
 
-      # PHASE 6 PLACEHOLDER: refresh the ClickUp Doc page from docs/top20.md (not wired yet; no-op).
-      - name: "Phase 6 placeholder: refresh ClickUp Doc"
-        run: echo "::notice::Phase 6 placeholder; ClickUp Doc refresh is not wired yet."
+      - name: Refresh ClickUp Doc page (top 20)
+        continue-on-error: true  # a Doc refresh problem must never fail a deploy
+        env:
+          CLICKUP_TOKEN: ${{ secrets.CLICKUP_TOKEN }}
+          CLICKUP_TEAM_ID: ${{ vars.CLICKUP_TEAM_ID }}
+        run: uv run python -m publish.clickup_doc
 
       - name: Find DIN id
         id: din
