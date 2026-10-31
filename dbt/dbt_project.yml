@@ -1,0 +1,13 @@
+name: agua_us_ingestion
+version: "0.1.0"
+config-version: 2
+profile: agua_us_ingestion
+model-paths: ["models"]
+seed-paths: ["seeds"]
+target-path: target
+clean-targets: ["target"]
+
+models:
+  agua_us_ingestion:
+    staging:
+      +materialized: view

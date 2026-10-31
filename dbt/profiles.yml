@@ -1,0 +1,11 @@
+agua_us_ingestion:
+  target: ci
+  outputs:
+    ci:
+      type: duckdb
+      path: target/ci.duckdb
+      threads: 4
+    prod:
+      type: duckdb
+      path: target/prod.duckdb
+      threads: 4

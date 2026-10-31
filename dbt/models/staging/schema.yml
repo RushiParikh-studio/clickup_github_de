@@ -1,0 +1,26 @@
+version: 2
+
+models:
+  - name: stg_naics_targets
+    columns:
+      - name: naics
+        data_tests: [not_null, unique]
+      - name: label
+        data_tests: [not_null]
+  - name: stg_ucmr5_results
+    columns:
+      - name: pwsid
+        data_tests: [not_null]
+      - name: state
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["TX", "CA", "NC", "NY", "FL"]
+      - name: contaminant
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["PFOA", "PFOS", "PFHxS"]
+      - name: is_over_4ppt
+        data_tests: [not_null]

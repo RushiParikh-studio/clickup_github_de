@@ -1,0 +1,26 @@
+name: din-id
+description: Extract the first DIN-n id from candidate strings, in order.
+inputs:
+  candidates:
+    description: Newline-separated candidate strings (branch, PR title, commit message), highest priority first.
+    required: true
+outputs:
+  task_id:
+    description: The DIN-n id, or empty if none found.
+    value: ${{ steps.find.outputs.task_id }}
+runs:
+  using: composite
+  steps:
+    - id: find
+      shell: bash
+      env:
+        CANDIDATES: ${{ inputs.candidates }}
+      run: |
+        set -euo pipefail
+        id=""
+        while IFS= read -r line; do
+          m=$(printf '%s' "$line" | grep -oE '(^|[^A-Za-z0-9])DIN-[0-9]+' | head -1 | grep -oE 'DIN-[0-9]+' || true)
+          if [ -n "$m" ]; then id="$m"; break; fi
+        done <<< "$CANDIDATES"
+        echo "task_id=$id" >> "$GITHUB_OUTPUT"
+        if [ -z "$id" ]; then echo "::notice::No DIN id found"; fi

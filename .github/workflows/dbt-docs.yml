@@ -1,0 +1,39 @@
+name: dbt-docs
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5  # uv reads .python-version + [tool.uv] from pyproject.toml
+      - run: uv sync --frozen
+      - name: Generate docs
+        working-directory: dbt
+        run: |
+          uv run dbt seed --target ci
+          uv run dbt docs generate --target ci
+      - name: Assemble site
+        run: |
+          mkdir -p site
+          cp -r dbt/target/. site/
+          rm -f site/*.duckdb
+          if [ -f docs/dashboard.html ]; then cp docs/dashboard.html site/; fi
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
