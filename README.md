@@ -9,6 +9,7 @@ Demo repository: a small dbt + DuckDB project with CI/CD that reports back to Cl
 3. Commit messages start with `DIN-7 ` (the `commit-msg` hook adds it from the branch name).
 4. The PR title contains the id; the `link-check` workflow fails if no `DIN-n` is in the branch or title.
 5. CI posts an upserted `[CI]` comment and sets task fields; merging to `main` runs `deploy`, which sets the environment and the task status.
+6. `deploy` also runs on a monthly `schedule` (the 5th, 06:00 UTC). A scheduled run has no DIN id, so it stamps no subtask; instead it appends a `[Refresh]` note with the re-pulled source row counts to the business Request (`CLICKUP_REQUEST_ID`), so source drift is visible where the request lives.
 
 ClickUp steps are skipped when `CLICKUP_TOKEN` is not set.
 

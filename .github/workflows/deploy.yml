@@ -3,12 +3,19 @@ name: deploy
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "0 6 5 * *"  # monthly rebuild (R5): the 5th, 06:00 UTC; re-pulls every source and notes the refresh on the Request
   workflow_dispatch:
     inputs:
       task_id:
         description: "ClickUp custom task id, e.g. DIN-202, used when the run is not triggered by a push"
         required: false
         type: string
+      simulate_schedule:
+        description: "Run the monthly-refresh path now (re-download sources, note the refresh on the Request)"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-prod
@@ -27,23 +34,38 @@ jobs:
       DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
       CLICKUP_DOC_ID: 2kydxwy9-1074  # not secrets
       CLICKUP_PAGE_ID: 2kydxwy9-294
+      CLICKUP_REQUEST_ID: DIN-209  # the business Request that asked for a monthly refresh (R5)
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5  # uv reads .python-version + [tool.uv] from pyproject.toml
       - run: uv sync --frozen
 
+      - name: Month stamp (public source files are re-downloaded at least monthly, so a new release is never missed)
+        id: month
+        run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+
       - name: Cache public source files (UCMR 5 zip, ZCTA-county relationship file)
+        if: github.event_name != 'schedule' && inputs.simulate_schedule != true  # a refresh run always re-downloads, so a release between pushes is never missed
         uses: actions/cache@v4
         with:
           path: |
             data/raw/ucmr5-occurrence-data.zip
             data/raw/tab20_zcta520_county20_natl.txt
-          key: raw-sources-v1-${{ hashFiles('extract/ucmr5.py', 'extract/zcta_county.py') }}
+          key: raw-sources-v2-${{ steps.month.outputs.month }}-${{ hashFiles('extract/ucmr5.py', 'extract/zcta_county.py') }}
 
       - name: Extract (UCMR 5, ZCTA-county, CBP, ACS)
         env:
           CENSUS_API_KEY: ${{ secrets.CENSUS_API_KEY }}  # scoped to this step only
-        run: uv run python -m extract --out data/raw
+        run: |
+          set -o pipefail
+          uv run python -m extract --out data/raw | tee extract.log
+
+      - name: Summarize re-pulled sources
+        id: sources
+        run: |
+          echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          rows=$(grep -oE '^\[[a-z0-9]+\] [0-9]+ rows' extract.log | sed -E 's/^\[([a-z0-9]+)\] ([0-9]+) rows/\1 \2/' | paste -sd ',' - | sed 's/,/, /g')
+          echo "rows=$rows" >> "$GITHUB_OUTPUT"
 
       - name: Load raw tables into the prod DuckDB file
         run: uv run python -m extract.load --src data/raw --db dbt/target/prod.duckdb
@@ -78,6 +100,19 @@ jobs:
           CLICKUP_TOKEN: ${{ secrets.CLICKUP_TOKEN }}
           CLICKUP_TEAM_ID: ${{ vars.CLICKUP_TEAM_ID }}
         run: uv run python -m publish.clickup_doc
+
+      - name: Note the scheduled refresh on the Request (R5)
+        if: github.event_name == 'schedule' || inputs.simulate_schedule == true
+        continue-on-error: true  # the note must never fail a deploy
+        uses: ./.github/actions/clickup
+        env:
+          CLICKUP_TOKEN: ${{ secrets.CLICKUP_TOKEN }}
+          CLICKUP_TEAM_ID: ${{ vars.CLICKUP_TEAM_ID }}
+        with:
+          task_id: ${{ env.CLICKUP_REQUEST_ID }}
+          comment_prefix: "[Refresh]"
+          mode: append
+          comment: "[Refresh] ${{ github.event_name == 'schedule' && 'Scheduled monthly rebuild' || 'Monthly rebuild (manual dry run)' }} on ${{ steps.sources.outputs.date }}. Sources re-pulled (rows): ${{ steps.sources.outputs.rows }}. Top-20 Doc and dashboard refreshed ↗ ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Find DIN id
         id: din
