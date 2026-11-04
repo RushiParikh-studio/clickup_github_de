@@ -37,7 +37,7 @@ jobs:
       CLICKUP_REQUEST_ID: DIN-209  # the business Request that asked for a monthly refresh (R5)
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5  # uv reads .python-version + [tool.uv] from pyproject.toml
+      - uses: astral-sh/setup-uv@v7  # uv reads .python-version + [tool.uv] from pyproject.toml
       - run: uv sync --frozen
 
       - name: Month stamp (public source files are re-downloaded at least monthly, so a new release is never missed)
