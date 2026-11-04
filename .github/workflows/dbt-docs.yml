@@ -62,7 +62,7 @@ jobs:
           for f in dashboard.html top20.md top20.json; do
             if [ -f "published/$f" ]; then cp "published/$f" site/; fi
           done
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
       - id: deployment
