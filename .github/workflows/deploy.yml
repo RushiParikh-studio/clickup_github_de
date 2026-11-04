@@ -40,6 +40,7 @@ jobs:
         run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
 
       - name: Cache public source files (UCMR 5 zip, ZCTA-county relationship file)
+        if: github.event_name != 'schedule'  # a scheduled run always re-downloads, so a release between pushes is never missed
         uses: actions/cache@v4
         with:
           path: |
