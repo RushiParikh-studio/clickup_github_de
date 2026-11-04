@@ -35,13 +35,17 @@ jobs:
       - uses: astral-sh/setup-uv@v5  # uv reads .python-version + [tool.uv] from pyproject.toml
       - run: uv sync --frozen
 
+      - name: Month stamp (public source files are re-downloaded at least monthly, so a new release is never missed)
+        id: month
+        run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+
       - name: Cache public source files (UCMR 5 zip, ZCTA-county relationship file)
         uses: actions/cache@v4
         with:
           path: |
             data/raw/ucmr5-occurrence-data.zip
             data/raw/tab20_zcta520_county20_natl.txt
-          key: raw-sources-v1-${{ hashFiles('extract/ucmr5.py', 'extract/zcta_county.py') }}
+          key: raw-sources-v2-${{ steps.month.outputs.month }}-${{ hashFiles('extract/ucmr5.py', 'extract/zcta_county.py') }}
 
       - name: Extract (UCMR 5, ZCTA-county, CBP, ACS)
         env:
