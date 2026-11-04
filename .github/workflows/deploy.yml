@@ -11,6 +11,11 @@ on:
         description: "ClickUp custom task id, e.g. DIN-202, used when the run is not triggered by a push"
         required: false
         type: string
+      simulate_schedule:
+        description: "Run the monthly-refresh path now (re-download sources, note the refresh on the Request)"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-prod
@@ -40,7 +45,7 @@ jobs:
         run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
 
       - name: Cache public source files (UCMR 5 zip, ZCTA-county relationship file)
-        if: github.event_name != 'schedule'  # a scheduled run always re-downloads, so a release between pushes is never missed
+        if: github.event_name != 'schedule' && inputs.simulate_schedule != true  # a refresh run always re-downloads, so a release between pushes is never missed
         uses: actions/cache@v4
         with:
           path: |
@@ -97,7 +102,7 @@ jobs:
         run: uv run python -m publish.clickup_doc
 
       - name: Note the scheduled refresh on the Request (R5)
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' || inputs.simulate_schedule == true
         continue-on-error: true  # the note must never fail a deploy
         uses: ./.github/actions/clickup
         env:
@@ -107,7 +112,7 @@ jobs:
           task_id: ${{ env.CLICKUP_REQUEST_ID }}
           comment_prefix: "[Refresh]"
           mode: append
-          comment: "[Refresh] Scheduled monthly rebuild on ${{ steps.sources.outputs.date }}. Sources re-pulled (rows): ${{ steps.sources.outputs.rows }}. Top-20 Doc and dashboard refreshed ↗ ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          comment: "[Refresh] ${{ github.event_name == 'schedule' && 'Scheduled monthly rebuild' || 'Monthly rebuild (manual dry run)' }} on ${{ steps.sources.outputs.date }}. Sources re-pulled (rows): ${{ steps.sources.outputs.rows }}. Top-20 Doc and dashboard refreshed ↗ ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Find DIN id
         id: din
